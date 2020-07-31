@@ -1,0 +1,7 @@
+{
+    "handler": "index.handler",
+    "id": "00000000-73a2-1d41-8173-a4ee7fcf0027",
+    "name": "DarthVader",
+    "runtime": "nodejs12.x",
+    "zip": "plain-input-print.zip"
+}

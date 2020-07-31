@@ -161,7 +161,8 @@ def deploy(fiuid,configfile):
                 # print(r.request.headers)
                 # print(r.request)
             else: 
-                click.secho("Function deployment started!",fg="yellow")
+                click.secho("Function packed and uploaded!",fg="yellow")
+                click.secho("Updating deployment on Darth VDR!")
                 fnStatus(data['id'])
 
 @cli1.command()

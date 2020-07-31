@@ -12,6 +12,6 @@
     },
     "additionalProperties": false,
     "required": [
-      "isHuman"
-    ]
+      "isHuman",
+    ],
   }

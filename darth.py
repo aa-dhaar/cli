@@ -1,10 +1,10 @@
 import click, configparser, json, requests, time
 from os.path import expanduser, join, isfile
 from os import getcwd
-
+from render import render
 
 config = configparser.ConfigParser()
-config_loc = join(expanduser('~'),'darth.ini')
+config_loc = join(expanduser('~'),'.darth-vdr.ini')
 config.read(config_loc)
 
 default = 'default' # Different configs
@@ -19,9 +19,16 @@ except:
         config.write(f)
     user_fiuid = ''
 
+def is_json(myjson):
+  try:
+    json_object = json.loads(myjson)
+  except ValueError as e:
+    return False
+  return True
+
 @click.group()
 def cli1():
-    """ This CLI does not require authentication"""
+    """ This CLI does requires authentication"""
     pass
 
 @cli1.command()
@@ -30,12 +37,14 @@ def login(fiuid):
     config.set(default,'fiuid',fiuid)
     with open(config_loc, 'w') as f:
         config.write(f)
-    click.echo("Welcome " + str(fiuid))
+    click.echo("Welcome to Darth VDR CLI!")
+    print(render('logo2.png'))
+    click.echo("Use `darth-vdr create` to create your first function!")
 
 def checkLoginState(ctx, param, value):
     if not value:
         click.echo('You need to login to continue, use ',nl='')
-        click.secho('`darth login`',bold=True,nl='')
+        click.secho('`darth-vdr login`',bold=True,nl='')
         click.echo('or use the flag --fiuid ')
         ctx.exit()
     return value
@@ -48,9 +57,9 @@ def checkLoginState(ctx, param, value):
 @click.option('--runtime',prompt="Runtime",help="The runtime engine to use.", type=click.Choice(["nodejs","nodejs4.3","nodejs6.10","nodejs8.10","nodejs10.x","nodejs12.x","java8","java11","python2.7","python3.6","python3.7","python3.8","dotnetcore1.0","dotnetcore2.0","dotnetcore2.1","dotnetcore3.1","nodejs4.3-edge","go1.x","ruby2.5","ruby2.7"], case_sensitive=False))
 @click.option('--zip',prompt="Zip Location",help="The location of zip file", type=click.Path(exists=False))
 def create(**data):
-    with open(join(getcwd(),'darth.json'), 'w') as out:
+    with open(join(getcwd(),'darth-vdr.json'), 'w') as out:
         json.dump(data,out,indent=4, sort_keys=True)
-        click.echo("Created your darth.json file!")
+        click.echo("Created your darth-vdr.json file!")
         try: # Error here
             with open('function.schema.json', 'x') as fw:
                 json.dumps({"$schema": "http://json-schema.org/draft-07/schema#"},fw,indent=4,sort_keys=False)
@@ -81,7 +90,7 @@ def fnStatus(fnid):
 
 @cli1.command()
 @click.option('--fiuid',help="Your FIU ID received from Darth VDR",default=user_fiuid,callback=checkLoginState,is_eager=True)
-@click.option('--configFile',help="The location of configuration file",default='darth.json',type=click.Path(exists=True,readable=True))
+@click.option('--configFile',help="The location of configuration file",default='darth-vdr.json',type=click.Path(exists=True,readable=True))
 def deploy(fiuid,configfile):
     with open(configfile, 'r+') as c:
         data = json.load(c)
@@ -93,6 +102,9 @@ def deploy(fiuid,configfile):
             schema = ''
             with open("function.schema.json", "r") as lst:
                 schema = lst.read()
+            if not is_json(schema):
+                click.secho("Invalid Schema", fg="red")
+                return
             payload = {
                 'fiuId': fiuid,
                 'jsonSchema': schema,
@@ -127,6 +139,10 @@ def deploy(fiuid,configfile):
             schema = ''
             with open("function.schema.json", "r") as lst:
                 schema = lst.read()
+            
+            if not is_json(schema):
+                click.secho("Invalid Schema", fg="red")
+                return
             payload = {
                 'fiuId': fiuid,
                 'jsonSchema': schema,
@@ -138,19 +154,19 @@ def deploy(fiuid,configfile):
             if r.status_code != 200 and r.status_code != 202:
                 click.secho("Function could not be update!",fg="red")
                 print(r.text)
-                print(r.text.encode('utf8'))
-                print(r.content)
-                print(r.status_code)
-                print(r.request.body)
-                print(r.request.headers)
-                print(r.request)
+                # print(r.text.encode('utf8'))
+                # print(r.content)
+                # print(r.status_code)
+                # print(r.request.body)
+                # print(r.request.headers)
+                # print(r.request)
             else: 
                 click.secho("Function deployment started!",fg="yellow")
                 fnStatus(data['id'])
 
 @cli1.command()
 @click.option('--fiuid',help="Your FIU ID received from Darth VDR",default=user_fiuid,callback=checkLoginState,is_eager=True)
-@click.option('--configFile',help="The location of configuration file",default='darth.json',type=click.Path(exists=True,readable=True))
+@click.option('--configFile',help="The location of configuration file",default='darth-vdr.json',type=click.Path(exists=True,readable=True))
 def status(fiuid,configfile):
     with open(configfile, 'r+') as c:
         con = json.load(c)
@@ -213,12 +229,57 @@ def listFn(fiuid):
 # darth job latest
 # darth job 452-235-245
 # darth-vdr create-job
+def jbStatus(fnid):
+    l = 8
+    with click.progressbar(length = l, label="Job Running") as bar:
+        for x in range(1,l):
+            bar.update(x)
+            time.sleep(15)
+            url = base_url + '/getJobDetails'
+            r = requests.get(url, params={'jobId': fnid})
+            if r.status_code == 200:
+                data = r.json()
 
+                if data['jobs'][fnid]['state'] == 'SUCCESS':
+                    bar.update(l)
+                    click.secho("\nJob ran successfully",fg="green")
+                    rx = json.loads(data['jobs'][fnid]['result'])
+                    print("Result", rx['data'])
+                    return
+                elif data['jobs'][fnid]['state'] == 'FAILED':
+                    bar.update(l)
+                    click.secho("\nJob failed!", fg="red")
+                    rx = json.loads(data['jobs'][fnid]['result'])
+                    print("Error", rx['error'])
+                    return
 
+    click.secho("Job Execution taking way too long.",fg="yellow")
 
-
-
-
+@cli1.command()
+@click.option('--fiuid',help="Your FIU ID received from Darth VDR",default=user_fiuid,callback=checkLoginState,is_eager=True)
+@click.option('--configFile',help="The location of configuration file",default='darth-vdr.json',type=click.Path(exists=True,readable=True))
+@click.option('--aa',help="The AA ID of the user",prompt='User\'s AA ID')
+@click.option('--params',help="The Parameters to send",prompt='Request Parameters')
+def job(fiuid,configfile,aa,params):
+    with open(configfile, 'r+') as c:
+        data = json.load(c)
+        if data['id'] == 'new':
+            click.echo("Function is not yet created, could not schedule job")
+            return
+        payload = {
+            'fiuId': fiuid,
+            'functionId': data['id'],
+            'aaId': aa,
+            'requestParams': params
+        }
+        url = base_url + '/createJob'
+        r = requests.post(url, headers={}, data = payload)
+        if r.status_code != 200 and r.status_code != 202:
+            click.secho("Function could not be created!",fg="red")
+        else:
+            jb = r.json()
+            click.secho(f"Job successfully created as {jb['jobId']}")
+            jbStatus(jb['jobId'])
 
 
 @click.group()

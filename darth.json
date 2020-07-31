@@ -1,5 +1,5 @@
 {
-    "handler": "index.handle",
+    "handler": "index.handler",
     "id": "00000000-73a2-1d41-8173-a401efe6001b",
     "name": "PostIt",
     "runtime": "nodejs12.x",
